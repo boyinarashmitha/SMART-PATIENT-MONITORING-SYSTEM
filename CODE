@@ -1,0 +1,54 @@
+import cv2
+import pytesseract
+import dlib
+import datetime
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+
+def extract_vital_signs_data(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary_image = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    text = pytesseract.image_to_string(binary_image)
+
+    vital_signs_data = {'heart_rate': 0, 'temperature': 0}
+    for line in text.split('\n'):
+        if 'Heart Rate' in line:
+            vital_signs_data['heart_rate'] = int(''.join(filter(str.isdigit, line)))
+        elif 'Temperature' in line:
+            vital_signs_data['temperature'] = float(''.join(filter(lambda x: x.isdigit() or x == '.', line)))
+
+    return vital_signs_data
+
+def recognize_and_log_entry(frame, entry_log):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = detector(gray)
+
+    for face in faces:
+        x, y, w, h = face.left(), face.top(), face.width(), face.height()
+        face_roi = frame[y:y+h, x:x+w]
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry_log.append({'timestamp': timestamp, 'person_id': 'Unknown'})
+
+cap = cv2.VideoCapture(0)
+
+entry_log = []
+
+while True:
+    ret, frame = cap.read()
+    vital_data_region = frame[100:200, 50:400]
+    vital_signs_data = extract_vital_signs_data(vital_data_region)
+
+    recognize_and_log_entry(frame, entry_log)
+
+    print("Extracted Vital Signs Data:", vital_signs_data)
+    cv2.imshow('Frame', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
